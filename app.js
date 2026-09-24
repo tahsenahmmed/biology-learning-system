@@ -1,100 +1,24 @@
-const KEY="biostudy-v1";
-const state=JSON.parse(localStorage.getItem(KEY)||"null")||{courses:[],notes:[]};
-const $=s=>document.querySelector(s);
-const $$=s=>document.querySelectorAll(s);
-const esc=s=>String(s||"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));
-const save=()=>{localStorage.setItem(KEY,JSON.stringify(state));render()};
-const course=id=>state.courses.find(c=>c.id===id);
-const chapter=(cid,id)=>{const c=course(cid);return c&&c.chapters.find(x=>x.id===id)};
-function id(){return crypto.randomUUID()}
-function empty(msg){return '<div class="empty">'+msg+'</div>'}
-
-function render(){
-  $("#courseCount").textContent=state.courses.length;
-  $("#chapterCount").textContent=state.courses.reduce((n,c)=>n+c.chapters.length,0);
-  $("#noteCount").textContent=state.notes.length;
-  $("#reviewedCount").textContent=state.notes.filter(n=>n.reviewed).length;
-  renderDashboard();renderCourses();renderNotes($("#noteSearch").value||"");renderReview();updateNoteCourses();
-}
-function renderDashboard(){
-  const box=$("#dashboardCourses");
-  if(!state.courses.length){box.innerHTML=empty("No courses yet. Your biology empire awaits its first brick.");return}
-  box.innerHTML=state.courses.map(c=>'<article class="course-card"><h4>'+esc(c.name)+'</h4><p>'+esc(c.description||"Biology course")+'</p><div class="course-meta"><span>'+c.chapters.length+' chapter'+(c.chapters.length===1?"":"s")+'</span><span>'+state.notes.filter(n=>n.courseId===c.id).length+' notes</span></div><button class="ghost-btn" onclick="openChapter(\''+c.id+'\')">+ Chapter</button></article>').join("");
-}
-function renderCourses(){
-  const box=$("#coursesList");
-  if(!state.courses.length){box.innerHTML=empty("No courses yet.");return}
-  box.innerHTML=state.courses.map(c=>'<article class="course-row"><div class="course-info"><h4>'+esc(c.name)+'</h4><p>'+esc(c.description||"No description")+'</p><div class="chapter-list">'+(c.chapters.length?c.chapters.map(ch=>'<span class="chapter-chip">'+esc(ch.name)+'</span>').join(""):'<span class="chapter-chip">No chapters yet</span>')+'</div></div><div class="top-actions"><button class="ghost-btn" onclick="openChapter(\''+c.id+'\')">+ Chapter</button><button class="ghost-btn" onclick="deleteCourse(\''+c.id+'\')">Delete</button></div></article>').join("");
-}
-function renderNotes(filter){
-  const q=(filter||"").toLowerCase().trim();
-  const notes=state.notes.filter(n=>{
-    const c=course(n.courseId),ch=chapter(n.courseId,n.chapterId);
-    return !q||[n.title,n.content,(n.tags||[]).join(" "),c&&c.name,ch&&ch.name].join(" ").toLowerCase().includes(q)
-  });
-  const box=$("#notesList");
-  if(!notes.length){box.innerHTML=empty("No notes match your search.");return}
-  box.innerHTML=notes.map(n=>{
-    const c=course(n.courseId),ch=chapter(n.courseId,n.chapterId);
-    const tags=(n.tags||[]).map(t=>'<span class="tag">#'+esc(t)+'</span>').join("");
-    return '<article class="note-card"><h4>'+esc(n.title)+'</h4><div class="note-meta">'+tags+'</div><div class="content">'+esc(n.content)+'</div><div class="note-footer"><span class="tag">'+esc(c?c.name:"Unassigned")+(ch?" · "+esc(ch.name):"")+'</span><button class="ghost-btn" onclick="toggleReviewed(\''+n.id+'\')">'+(n.reviewed?"Reviewed ✓":"Mark reviewed")+'</button></div></article>'
-  }).join("");
-}
-function renderReview(){
-  const notes=state.notes.filter(n=>!n.reviewed),box=$("#reviewList");
-  if(!notes.length){box.innerHTML=empty("Review queue is clear. Suspiciously productive.");return}
-  box.innerHTML=notes.map(n=>'<article class="review-card"><button class="primary-btn" onclick="toggleReviewed(\''+n.id+'\')">Mark reviewed</button><h4>'+esc(n.title)+'</h4><p>'+esc(n.content.slice(0,180))+(n.content.length>180?"…":"")+'</p></article>').join("");
-}
-function updateNoteCourses(){
-  $("#noteCourse").innerHTML='<option value="">Unassigned</option>'+state.courses.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join("");
-  updateChapterOptions();
-}
-function updateChapterOptions(){
-  const c=course($("#noteCourse").value);
-  $("#noteChapter").innerHTML='<option value="">Unassigned</option>'+((c&&c.chapters)||[]).map(ch=>'<option value="'+ch.id+'">'+esc(ch.name)+'</option>').join("");
-}
-function openChapter(cid){$("#chapterCourseId").value=cid;$("#chapterName").value="";$("#chapterDialog").showModal()}
-function deleteCourse(cid){
-  if(!confirm("Delete this course? Its notes will become unassigned."))return;
-  state.courses=state.courses.filter(c=>c.id!==cid);
-  state.notes.forEach(n=>{if(n.courseId===cid){n.courseId=null;n.chapterId=null}});
-  save();
-}
-function toggleReviewed(nid){const n=state.notes.find(x=>x.id===nid);if(n){n.reviewed=!n.reviewed;save()}}
-
-$$(".nav-item").forEach(btn=>btn.onclick=()=>{
-  $$(".nav-item").forEach(b=>b.classList.remove("active"));btn.classList.add("active");
-  $$(".view").forEach(v=>v.classList.remove("active"));$("#"+btn.dataset.view+"View").classList.add("active");
-  $("#pageTitle").textContent=btn.querySelector("span").textContent;
-});
+const URL="https://nyuzirfxfzyvnnmshffz.supabase.co",KEY="sb_publishable_IJ77OXLurFMxd8HhkDfe9g_1gd3KYYE",db=window.supabase.createClient(URL,KEY);
+const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s),esc=s=>String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
+let state={courses:[],notes:[]},user,mode="signin";const course=id=>state.courses.find(c=>c.id===id),chapter=(cid,id)=>{const c=course(cid);return c?.chapters.find(x=>x.id===id)},empty=x=>'<div class="empty">'+x+'</div>';
+function render(){ $("#courseCount").textContent=state.courses.length;$("#chapterCount").textContent=state.courses.reduce((n,c)=>n+c.chapters.length,0);$("#noteCount").textContent=state.notes.length;$("#reviewedCount").textContent=state.notes.filter(n=>n.reviewed).length;renderDashboard();renderCourses();renderNotes($("#noteSearch").value||"");renderReview();updateNoteCourses() }
+function renderDashboard(){const b=$("#dashboardCourses");if(!state.courses.length){b.innerHTML=empty("No courses yet. Your biology empire awaits its first brick.");return}b.innerHTML=state.courses.map(c=>'<article class="course-card"><h4>'+esc(c.name)+'</h4><p>'+esc(c.description||"Biology course")+'</p><div class="course-meta"><span>'+c.chapters.length+' chapters</span><span>'+state.notes.filter(n=>n.course_id===c.id).length+' notes</span></div><button class="ghost-btn" onclick="openChapter(\''+c.id+'\')">+ Chapter</button></article>').join("")}
+function renderCourses(){const b=$("#coursesList");if(!state.courses.length){b.innerHTML=empty("No courses yet.");return}b.innerHTML=state.courses.map(c=>'<article class="course-row"><div class="course-info"><h4>'+esc(c.name)+'</h4><p>'+esc(c.description||"No description")+'</p><div class="chapter-list">'+(c.chapters.length?c.chapters.map(ch=>'<span class="chapter-chip">'+esc(ch.name)+'</span>').join(""):'<span class="chapter-chip">No chapters yet</span>')+'</div></div><div class="top-actions"><button class="ghost-btn" onclick="openChapter(\''+c.id+'\')">+ Chapter</button><button class="ghost-btn" onclick="deleteCourse(\''+c.id+'\')">Delete</button></div></article>').join("")}
+function renderNotes(q){q=q.toLowerCase().trim();const ns=state.notes.filter(n=>!q||[n.title,n.content,(n.tags||[]).join(" "),course(n.course_id)?.name,chapter(n.course_id,n.chapter_id)?.name].join(" ").toLowerCase().includes(q)),b=$("#notesList");if(!ns.length){b.innerHTML=empty("No notes match your search.");return}b.innerHTML=ns.map(n=>'<article class="note-card"><h4>'+esc(n.title)+'</h4><div class="note-meta">'+(n.tags||[]).map(t=>'<span class="tag">#'+esc(t)+'</span>').join("")+'</div><div class="content">'+esc(n.content)+'</div><div class="note-footer"><span class="tag">'+esc(course(n.course_id)?.name||"Unassigned")+'</span><button class="ghost-btn" onclick="toggleReviewed(\''+n.id+'\')">'+(n.reviewed?"Reviewed ✓":"Mark reviewed")+'</button></div></article>').join("")}
+function renderReview(){const ns=state.notes.filter(n=>!n.reviewed),b=$("#reviewList");b.innerHTML=ns.length?ns.map(n=>'<article class="review-card"><button class="primary-btn" onclick="toggleReviewed(\''+n.id+'\')">Mark reviewed</button><h4>'+esc(n.title)+'</h4><p>'+esc(n.content.slice(0,180))+'</p></article>').join(""):empty("Review queue is clear. Suspiciously productive.")}
+function updateNoteCourses(){$("#noteCourse").innerHTML='<option value="">Unassigned</option>'+state.courses.map(c=>'<option value="'+c.id+'">'+esc(c.name)+'</option>').join("");updateChapterOptions()}function updateChapterOptions(){const c=course($("#noteCourse").value);$("#noteChapter").innerHTML='<option value="">Unassigned</option>'+(c?.chapters||[]).map(x=>'<option value="'+x.id+'">'+esc(x.name)+'</option>').join("")}
+async function load(){const [a,b,c]=await Promise.all([db.from("courses").select("*").order("created_at"),db.from("chapters").select("*").order("created_at"),db.from("notes").select("*").order("created_at",{ascending:false})]);if(a.error||b.error||c.error)throw(a.error||b.error||c.error);state.courses=(a.data||[]).map(x=>({...x,chapters:(b.data||[]).filter(y=>y.course_id===x.id)}));state.notes=c.data||[];$("#storageStatus").textContent="Connected";render()}
+function openChapter(id){$("#chapterCourseId").value=id;$("#chapterName").value="";$("#chapterDialog").showModal()}
+async function deleteCourse(id){if(!confirm("Delete this course? Its notes will become unassigned."))return;const r=await db.from("courses").delete().eq("id",id);if(r.error)return alert(r.error.message);load()}
+async function toggleReviewed(id){const n=state.notes.find(x=>x.id===id);const r=await db.from("notes").update({reviewed:!n.reviewed,updated_at:new Date().toISOString()}).eq("id",id);if(r.error)return alert(r.error.message);load()}
+$$(".nav-item").forEach(btn=>btn.onclick=()=>{$$(".nav-item").forEach(x=>x.classList.remove("active"));btn.classList.add("active");$$(".view").forEach(x=>x.classList.remove("active"));$("#"+btn.dataset.view+"View").classList.add("active");$("#pageTitle").textContent=btn.querySelector("span").textContent});
 $("#addCourseBtn").onclick=$("#addCourseBtn2").onclick=()=>{$("#courseForm").reset();$("#courseDialog").showModal()};
-$("#courseForm").onsubmit=e=>{
-  e.preventDefault();
-  state.courses.push({id:id(),name:$("#courseName").value.trim(),description:$("#courseDescription").value.trim(),chapters:[]});
-  $("#courseDialog").close();save();
-};
-$("#chapterForm").onsubmit=e=>{
-  e.preventDefault();
-  const c=course($("#chapterCourseId").value);
-  if(c)c.chapters.push({id:id(),name:$("#chapterName").value.trim()});
-  $("#chapterDialog").close();save();
-};
-$("#addNoteBtn").onclick=()=>{
-  if(!state.courses.length){alert("Create a course first.");return}
-  $("#noteForm").reset();updateNoteCourses();$("#noteDialog").showModal();
-};
-$("#noteCourse").onchange=updateChapterOptions;
-$("#noteForm").onsubmit=e=>{
-  e.preventDefault();
-  state.notes.unshift({id:id(),title:$("#noteTitle").value.trim(),courseId:$("#noteCourse").value||null,chapterId:$("#noteChapter").value||null,tags:$("#noteTags").value.split(",").map(x=>x.trim()).filter(Boolean),content:$("#noteContent").value.trim(),reviewed:false});
-  $("#noteDialog").close();save();
-};
-$("#noteSearch").oninput=e=>renderNotes(e.target.value);
-$("#searchBtn").onclick=()=>{$("#globalSearch").value="";$("#searchResults").innerHTML="";$("#searchDialog").showModal();$("#globalSearch").focus()};
-$("#globalSearch").oninput=e=>{
-  const q=e.target.value.toLowerCase().trim(),items=[];
-  state.courses.forEach(c=>{if(!q||c.name.toLowerCase().includes(q))items.push('<div class="search-result"><strong>'+esc(c.name)+'</strong><span>Course · '+c.chapters.length+' chapters</span></div>')});
-  state.notes.forEach(n=>{if(!q||[n.title,n.content].join(" ").toLowerCase().includes(q))items.push('<div class="search-result"><strong>'+esc(n.title)+'</strong><span>Note</span></div>')});
-  $("#searchResults").innerHTML=items.slice(0,30).join("")||empty("Nothing found.");
-};
-render();
+$("#courseForm").onsubmit=async e=>{e.preventDefault();const r=await db.from("courses").insert({user_id:user.id,name:$("#courseName").value.trim(),description:$("#courseDescription").value.trim()});if(r.error)return alert(r.error.message);$("#courseDialog").close();load()};
+$("#chapterForm").onsubmit=async e=>{e.preventDefault();const r=await db.from("chapters").insert({course_id:$("#chapterCourseId").value,name:$("#chapterName").value.trim()});if(r.error)return alert(r.error.message);$("#chapterDialog").close();load()};
+$("#addNoteBtn").onclick=()=>{if(!state.courses.length)return alert("Create a course first.");$("#noteForm").reset();updateNoteCourses();$("#noteDialog").showModal()};$("#noteCourse").onchange=updateChapterOptions;
+$("#noteForm").onsubmit=async e=>{e.preventDefault();const r=await db.from("notes").insert({user_id:user.id,title:$("#noteTitle").value.trim(),course_id:$("#noteCourse").value||null,chapter_id:$("#noteChapter").value||null,tags:$("#noteTags").value.split(",").map(x=>x.trim()).filter(Boolean),content:$("#noteContent").value.trim()});if(r.error)return alert(r.error.message);$("#noteDialog").close();load()};
+$("#noteSearch").oninput=e=>renderNotes(e.target.value);$("#searchBtn").onclick=()=>{$("#globalSearch").value="";$("#searchResults").innerHTML="";$("#searchDialog").showModal();$("#globalSearch").focus()};$("#globalSearch").oninput=e=>{const q=e.target.value.toLowerCase().trim(),a=[];state.courses.forEach(c=>{if(!q||c.name.toLowerCase().includes(q))a.push('<div class="search-result"><strong>'+esc(c.name)+'</strong><span>Course</span></div>')});state.notes.forEach(n=>{if(!q||[n.title,n.content].join(" ").toLowerCase().includes(q))a.push('<div class="search-result"><strong>'+esc(n.title)+'</strong><span>Note</span></div>')});$("#searchResults").innerHTML=a.slice(0,30).join("")||empty("Nothing found.")};
+$("#authToggle").onclick=()=>{mode=mode==="signin"?"signup":"signin";$("#authTitle").textContent=mode==="signin"?"Sign in to BioStudy":"Create your BioStudy account";$("#authSubmit").textContent=mode==="signin"?"Sign in":"Create account";$("#authToggle").textContent=mode==="signin"?"Create a new account":"I already have an account"};
+$("#authForm").onsubmit=async e=>{e.preventDefault();const email=$("#authEmail").value,password=$("#authPassword").value,r=mode==="signin"?await db.auth.signInWithPassword({email,password}):await db.auth.signUp({email,password});if(r.error)return $("#authMessage").textContent=r.error.message;if(mode==="signup"&&!r.data.session)return $("#authMessage").textContent="Account created. Check your email, then sign in."};
+$("#logoutBtn").onclick=async()=>{await db.auth.signOut();location.reload()};
+(async()=>{const s=await db.auth.getSession();if(s.data.session){user=s.data.session.user;$("#authScreen").hidden=true;$("#appShell").hidden=false;try{await load()}catch(e){$("#storageStatus").textContent="Setup pending";console.error(e);alert("Cloud database is still starting. Refresh shortly.")}}})();
