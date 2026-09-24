@@ -177,21 +177,52 @@ function setupSearch(){
     $("#searchResults").innerHTML=a.slice(0,30).join("")||empty("Nothing found.");
   });
 }
+function setAuthMessage(msg,error=false){const el=$("#authMessage");if(el){el.textContent=msg;el.classList.toggle("error",error)}}
 function setupAuth(){
   $("#authToggle")?.addEventListener("click",()=>{
     mode=mode==="signin"?"signup":"signin";
-    $("#authTitle").textContent=mode==="signin"?"Sign in to BioStudy":"Create your BioStudy account";
-    $("#authSubmit").textContent=mode==="signin"?"Sign in":"Create account";
-    $("#authToggle").textContent=mode==="signin"?"Create a new account":"I already have an account";
-    $("#authMessage").textContent="";
+    const signup=mode==="signup";
+    $("#authTitle").textContent=signup?"Create your BioStudy account":"Sign in to BioStudy";
+    $("#authSubmit").textContent=signup?"Create account":"Sign in";
+    $("#authToggle").textContent=signup?"I already have an account":"Create a new account";
+    $("#authPassword").setAttribute("autocomplete",signup?"new-password":"current-password");
+    setAuthMessage("");
+  });
+  $("#googleBtn")?.addEventListener("click",async()=>{
+    setAuthMessage("Connecting to Google…");
+    const redirectTo=new URL("dashboard.html",window.location.href).href;
+    const r=await db.auth.signInWithOAuth({provider:"google",options:{redirectTo}});
+    if(r.error){
+      const msg=r.error.message||"Google sign-in could not start.";
+      setAuthMessage(msg+". If Google sign-in is not enabled yet, use email/password or enable the Google provider in Supabase.",true);
+    }
   });
   $("#authForm")?.addEventListener("submit",async e=>{
     e.preventDefault();
     const email=$("#authEmail").value.trim(),password=$("#authPassword").value;
-    const r=mode==="signin"?await db.auth.signInWithPassword({email,password}):await db.auth.signUp({email,password});
-    if(r.error){$("#authMessage").textContent=r.error.message;return}
-    if(mode==="signup"&&!r.data.session){$("#authMessage").textContent="Account created. Check your email, then sign in.";return}
-    go("dashboard.html");
+    $("#authSubmit").disabled=true;setAuthMessage(mode==="signup"?"Creating your account…":"Signing you in…");
+    try{
+      const r=mode==="signin"
+        ?await db.auth.signInWithPassword({email,password})
+        :await db.auth.signUp({email,password});
+      if(r.error){
+        let msg=r.error.message||"Authentication failed.";
+        if(/email not confirmed/i.test(msg))msg="Your email is not confirmed yet. Check your inbox for the Supabase confirmation email, then sign in again.";
+        else if(/invalid login credentials/i.test(msg))msg="Email or password is incorrect. If you just created the account, confirm your email first.";
+        setAuthMessage(msg,true);return;
+      }
+      if(mode==="signup"){
+        if(r.data.session){go("dashboard.html");return}
+        setAuthMessage("Account created. Check your email to confirm the account, then return here and sign in.");
+        return;
+      }
+      if(r.data.session){go("dashboard.html");return}
+      setAuthMessage("Sign-in completed but no session was returned. Please try again.",true);
+    }catch(err){setAuthMessage(err.message||"Something went wrong while signing in.",true)}
+    finally{$("#authSubmit").disabled=false}
+  });
+  db.auth.onAuthStateChange((event,session)=>{
+    if(session && (event==="SIGNED_IN"||event==="INITIAL_SESSION") && location.pathname.endsWith("index.html"))go("dashboard.html");
   });
 }
 (async()=>{
