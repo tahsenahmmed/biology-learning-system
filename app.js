@@ -201,7 +201,7 @@ function setupAuth(){
     try{
       const r=mode==="signin"
         ?await db.auth.signInWithPassword({email,password})
-        :await db.auth.signUp({email,password});
+        :await db.auth.signUp({email,password,options:{emailRedirectTo:new URL("dashboard.html",window.location.href).href}});
 
       if(r.error){
         let msg=r.error.message||"Authentication failed.";
