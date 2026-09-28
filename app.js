@@ -4,7 +4,7 @@ const db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 const $=s=>document.querySelector(s);
 const $$=s=>document.querySelectorAll(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
-let state={courses:[],notes:[],files:[]},user=null,mode="signin";
+let state={courses:[],notes:[],files:[],topics:[],topicStats:[],snapshots:[]},user=null,mode="signin";
 const page=location.pathname.split("/").pop()||"index.html";
 const currentPage=page.replace(".html","")||"index";
 
@@ -38,21 +38,26 @@ function setupNavigation(){
 }
 
 async function load(){
-  const [a,b,c,f]=await Promise.all([
+  const [a,b,c,f,t,ts,sn]=await Promise.all([
     db.from("courses").select("*").order("created_at"),
     db.from("chapters").select("*").order("created_at"),
     db.from("notes").select("*").order("created_at",{ascending:false}),
-    db.from("study_files").select("*").order("created_at",{ascending:false})
+    db.from("study_files").select("*").order("created_at",{ascending:false}),
+    db.from("conversation_topics").select("*").order("source_date",{ascending:false}).order("created_at",{ascending:false}),
+    db.from("topic_dashboard_stats").select("*"),
+    db.from("topic_stats_snapshots").select("*").order("captured_at",{ascending:false}).limit(12)
   ]);
-  const err=a.error||b.error||c.error||f.error;
+  const err=a.error||b.error||c.error||f.error||t.error||ts.error||sn.error;
   if(err)throw err;
   state.courses=(a.data||[]).map(x=>({...x,chapters:(b.data||[]).filter(y=>y.course_id===x.id)}));
   state.notes=c.data||[];
   state.files=f.data||[];
+  state.topics=t.data||[];
+  state.topicStats=ts.data||[];
+  state.snapshots=sn.data||[];
   if($("#storageStatus"))$("#storageStatus").textContent="Connected";
   renderPage();
 }
-
 function renderPage(){
   if(currentPage==="dashboard")renderDashboard();
   if(currentPage==="courses")renderCourses();
@@ -67,10 +72,37 @@ function renderDashboard(){
   $("#noteCount").textContent=state.notes.length;
   $("#fileCount").textContent=state.files.length;
   const b=$("#dashboardCourses");
-  if(!state.courses.length){b.innerHTML=empty("No courses yet. Your biology empire awaits its first brick.");return}
-  b.innerHTML=state.courses.map(c=>'<article class="course-card"><h4>'+esc(c.name)+'</h4><p>'+esc(c.description||"Biology course")+'</p><div class="course-meta"><span>'+c.chapters.length+' chapters</span><span>'+state.notes.filter(n=>n.course_id===c.id).length+' notes</span></div><a class="ghost-btn inline-btn" href="courses.html">Open course area</a></article>').join("");
-}
+  if(!state.courses.length){b.innerHTML=empty("No courses yet. Your biology empire awaits its first brick.");}
+  else b.innerHTML=state.courses.map(c=>'<article class="course-card"><h4>'+esc(c.name)+'</h4><p>'+esc(c.description||"Biology course")+'</p><div class="course-meta"><span>'+c.chapters.length+' chapters</span><span>'+state.notes.filter(n=>n.course_id===c.id).length+' notes</span></div><a class="ghost-btn inline-btn" href="courses.html">Open course area</a></article>').join("");
 
+  const total=state.topics.length;
+  $("#topicCount") && ($("#topicCount").textContent=total);
+  $("#categoryCount") && ($("#categoryCount").textContent=state.topicStats.length);
+  $("#topicLastUpdated") && ($("#topicLastUpdated").textContent=state.topics[0]?.source_date?new Date(state.topics[0].source_date+"T00:00:00").toLocaleDateString():"No data yet");
+
+  const chart=$("#topicCategoryChart");
+  if(chart){
+    chart.innerHTML=state.topicStats.length?state.topicStats.map(s=>{
+      const pct=Number(s.percentage||0);
+      return '<div class="topic-bar-row"><div class="topic-bar-label"><span>'+esc(s.category_name)+'</span><strong>'+s.topic_count+' <small>'+pct.toFixed(0)+'%</small></strong></div><div class="topic-bar"><span style="width:'+Math.max(2,pct)+'%"></span></div></div>';
+    }).join(""):empty("No topic analytics yet.");
+  }
+
+  const recent=$("#recentTopics");
+  if(recent){
+    recent.innerHTML=state.topics.length?state.topics.slice(0,8).map(t=>'<article class="topic-item"><div><strong>'+esc(t.title)+'</strong><p>'+esc(t.summary||"No summary")+'</p></div><span class="topic-date">'+(t.source_date?new Date(t.source_date+"T00:00:00").toLocaleDateString():"—")+'</span></article>').join(""):empty("No conversation topics yet.");
+  }
+
+  const trend=$("#topicTrend");
+  if(trend){
+    const points=[...state.snapshots].reverse();
+    trend.innerHTML=points.length?points.map((s,i)=>{
+      const prev=points[i-1]?.total_topics;
+      const delta=prev==null?"":((s.total_topics-prev)>=0?"+":"")+(s.total_topics-prev);
+      return '<div class="trend-item"><span>'+new Date(s.captured_at).toLocaleDateString(undefined,{month:"short",day:"numeric"})+'</span><strong>'+s.total_topics+'</strong><small>'+delta+'</small></div>';
+    }).join(""):empty("Snapshots will appear after the next scheduled update.");
+  }
+}
 function renderCourses(){
   const b=$("#coursesList");
   if(!state.courses.length){b.innerHTML=empty("No courses yet.");return}
