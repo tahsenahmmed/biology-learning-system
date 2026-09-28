@@ -84,7 +84,7 @@ function renderDashboard(){
   if(chart){
     chart.innerHTML=state.topicStats.length?state.topicStats.map(s=>{
       const pct=Number(s.percentage||0);
-      return '<div class="topic-bar-row"><div class="topic-bar-label"><span>'+esc(s.category_name)+'</span><strong>'+s.topic_count+' <small>'+pct.toFixed(0)+'%</small></strong></div><div class="topic-bar"><span style="width:'+Math.max(2,pct)+'%"></span></div></div>';
+      return '<div class="topic-bar-row"><div class="topic-bar-label"><span>'+esc(s.category)+'</span><strong>'+s.topic_count+' <small>'+pct.toFixed(0)+'%</small></strong></div><div class="topic-bar"><span style="width:'+Math.max(2,pct)+'%"></span></div></div>';
     }).join(""):empty("No topic analytics yet.");
   }
 
